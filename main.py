@@ -1,10 +1,12 @@
 from datetime import datetime
 import json
+import numpy as np
 from pathlib import Path
 from dataset.gait_preprocessor import prepare_dataloaders
 from metrics.model_analyzer import ModelAnalyzer
 from model.gait_classifier import GaitClassifier
 from model.gait_cnn import GaitCNN
+from optimizer.hyper_param_optimizer import run_optuna_study
 
 def run_training_pipeline():
     # Create timestamped log directory
@@ -126,5 +128,122 @@ def run_training_pipeline():
     
     return classifier, analyzer, log_dir
 
+def hyperparam_optim():
+    print("="*60)
+    print("GAIT CNN HYPERPARAMETER OPTIMIZATION WITH OPTUNA")
+    print("="*60)
+    
+    # ==========================================
+    # 1. PREPARE YOUR DATA
+    # ==========================================
+    
+    print("\n1. Preparing data...")
+    
+    # Example: Create dummy data (replace with your actual data)
+    n_samples_train = 1000
+    n_samples_val = 200
+    time_steps = 100
+    n_channels = 24
+    num_classes = 3
+    
+    # Simulate data (replace with your actual normalized data)
+    X_train = np.random.rand(n_samples_train, time_steps, n_channels).astype(np.float32)
+    y_train = np.random.randint(0, num_classes, n_samples_train)
+    
+    X_val = np.random.rand(n_samples_val, time_steps, n_channels).astype(np.float32)
+    y_val = np.random.randint(0, num_classes, n_samples_val)
+    
+    print(f"✓ Training data: {X_train.shape}")
+    print(f"✓ Validation data: {X_val.shape}")
+    print(f"✓ Number of classes: {num_classes}")
+    
+    # ==========================================
+    # 2. RUN OPTUNA OPTIMIZATION
+    # ==========================================
+    
+    print("\n2. Running Optuna optimization...")
+    print("   This may take a while depending on n_trials and n_epochs...")
+    
+    study = run_optuna_study(
+        X_train, y_train, 
+        X_val, y_val,
+        num_classes=num_classes,
+        n_trials=20,      # Start with 20 trials (increase for better results)
+        n_epochs=15,      # 15 epochs per trial
+        study_name='gait_cnn_tuning'
+    )
+    
+    # ==========================================
+    # 3. PRINT RESULTS
+    # ==========================================
+    
+    best_params = print_study_results(study)
+    
+    # ==========================================
+    # 4. CREATE AND SAVE BEST MODEL
+    # ==========================================
+    
+    print("\n" + "="*60)
+    print("CREATING BEST MODEL")
+    print("="*60)
+    
+    best_model = create_best_model(
+        best_params, 
+        num_classes=num_classes,
+        input_length=time_steps,
+        input_channels=n_channels
+    )
+    
+    print(f"✓ Best model created")
+    print(f"✓ Total parameters: {sum(p.numel() for p in best_model.parameters()):,}")
+    
+    # Save best model
+    torch.save({
+        'model_state_dict': best_model.state_dict(),
+        'hyperparameters': best_params,
+        'num_classes': num_classes
+    }, 'best_gait_cnn_model.pth')
+    
+    print(f"✓ Model saved to 'best_gait_cnn_model.pth'")
+    
+    # ==========================================
+    # 5. VISUALIZE OPTIMIZATION (Optional)
+    # ==========================================
+    
+    print("\n" + "="*60)
+    print("VISUALIZATION (if you have plotly installed)")
+    print("="*60)
+    
+    try:
+        import optuna.visualization as vis
+        
+        # Optimization history
+        fig = vis.plot_optimization_history(study)
+        fig.write_html('optimization_history.html')
+        print("✓ Saved optimization_history.html")
+        
+        # Parameter importances
+        fig = vis.plot_param_importances(study)
+        fig.write_html('param_importances.html')
+        print("✓ Saved param_importances.html")
+        
+        # Parallel coordinate plot
+        fig = vis.plot_parallel_coordinate(study)
+        fig.write_html('parallel_coordinate.html')
+        print("✓ Saved parallel_coordinate.html")
+        
+    except ImportError:
+        print("⚠ Install plotly to visualize results: pip install plotly")
+    
+    print("\n" + "="*60)
+    print("OPTIMIZATION COMPLETE!")
+    print("="*60)
+    print("\nNext steps:")
+    print("  1. Review the best hyperparameters above")
+    print("  2. Train final model with best_params on full dataset")
+    print("  3. Check visualization HTML files for insights")
+    print("  4. Consider running more trials for better results")
+
 if __name__ == "__main__":
-    run_training_pipeline()
+    #run_training_pipeline()
+    hyperparam_optim()

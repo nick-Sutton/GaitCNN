@@ -66,10 +66,6 @@ class GaitCNN(nn.Module):
 
         self.flatten_size = w2 * 4 * 4
         
-        # Calculate the flattened size after convolutions and pooling
-        self._calculate_flatten_size(input_length, input_channels, 
-                                    p11, p12, p21, p22, w2)
-        
         # Fully Connected Layer
         self.fc1 = nn.Linear(self.flatten_size, fc_neurons)
         
