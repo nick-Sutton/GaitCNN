@@ -7,6 +7,9 @@ import numpy as np
 from model.gait_classifier import GaitClassifier
 from model.gait_cnn import GaitCNN
 
+# Import your model classes
+# from your_module import GaitClassificationCNN, GaitClassifier, DataNormalizer, calculate_class_weights
+
 
 def create_dataloaders(X_train, y_train, X_val, y_val, batch_size):
     """Create PyTorch DataLoaders"""
@@ -92,100 +95,151 @@ def objective(trial, X_train, y_train, X_val, y_val, num_classes,
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    model = GaitCNN(
-        input_length=input_length,
-        input_channels=input_channels,
-        num_classes=num_classes,
-        f11=f11, f12=f12, w1=w1,
-        p11=p11, p12=p12,
-        f21=f21, f22=f22, w2=w2,
-        p21=p21, p22=p22,
-        fc_neurons=fc_neurons,
-        dropout_rate=dropout_rate
-    )
+    try:
+        model = GaitCNN(
+            input_length=input_length,
+            input_channels=input_channels,
+            num_classes=num_classes,
+            f11=f11, f12=f12, w1=w1,
+            p11=p11, p12=p12,
+            f21=f21, f22=f22, w2=w2,
+            p21=p21, p22=p22,
+            fc_neurons=fc_neurons,
+            dropout_rate=dropout_rate
+        )
+    except Exception as e:
+        print(f"Error creating model: {e}")
+        raise optuna.TrialPruned()
     
-    # Calculate class weights if data is imbalanced
-    #class_weights = calculate_class_weights(y_train, num_classes)
-    
-    classifier = GaitClassifier(
-        model, 
-        device=device
-    )
+    # Create classifier wrapper
+    classifier = GaitClassifier(model, device=device)
     
     # ==========================================
-    # 3. SETUP TRAINING
+    # 3. CREATE DATA LOADERS
     # ==========================================
     
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay
-    )
-    
-    # Learning rate scheduler (optional but recommended)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=3
-    )
-    
-    # Create data loaders
     train_loader, val_loader = create_dataloaders(
         X_train, y_train, X_val, y_val, batch_size
     )
     
     # ==========================================
-    # 4. TRAINING LOOP
+    # 4. TRAIN MODEL
     # ==========================================
     
+    # Train using your GaitClassifier.train() method
+    # We'll monitor validation accuracy and report to Optuna
+    history = classifier.train(
+        train_loader=train_loader,
+        val_loader=val_loader,
+        epochs=n_epochs,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay,
+        early_stopping_patience=5,
+        save_best_model=False  # Don't save during optimization
+    )
+    
+    # Get best validation accuracy from history
+    best_val_acc = max(history['val_acc'])
+    
+    # Report final accuracy to Optuna
+    return best_val_acc
+
+
+def objective_with_pruning(trial, X_train, y_train, X_val, y_val, num_classes, 
+                           input_length=100, input_channels=24, n_epochs=20):
+    """
+    Alternative objective with manual training loop for better Optuna pruning.
+    This allows Optuna to stop unpromising trials early.
+    """
+    
+    # 1. Suggest hyperparameters (same as above)
+    w1 = trial.suggest_int('w1', 10, 30, step=5)
+    f11 = trial.suggest_categorical('f11', [7, 9, 11, 13, 15])
+    f12 = trial.suggest_categorical('f12', [3, 5, 7, 9])
+    w2 = trial.suggest_int('w2', 10, 25, step=5)
+    f21 = trial.suggest_categorical('f21', [7, 9, 11, 13])
+    f22 = trial.suggest_categorical('f22', [7, 9, 11, 13])
+    p11 = trial.suggest_categorical('p11', [2, 3])
+    p12 = trial.suggest_categorical('p12', [2, 3])
+    p21 = trial.suggest_categorical('p21', [2, 3])
+    p22 = trial.suggest_categorical('p22', [2, 3])
+    fc_neurons = trial.suggest_int('fc_neurons', 512, 4096, step=512)
+    dropout_rate = trial.suggest_float('dropout_rate', 0.3, 0.7)
+    learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2, log=True)
+    weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-3, log=True)
+    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
+    
+    # 2. Create model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    try:
+        model = GaitCNN(
+            input_length=input_length,
+            input_channels=input_channels,
+            num_classes=num_classes,
+            f11=f11, f12=f12, w1=w1,
+            p11=p11, p12=p12,
+            f21=f21, f22=f22, w2=w2,
+            p21=p21, p22=p22,
+            fc_neurons=fc_neurons,
+            dropout_rate=dropout_rate
+        )
+        model = model.to(device)
+    except Exception as e:
+        print(f"Error creating model: {e}")
+        raise optuna.TrialPruned()
+    
+    # 3. Setup training
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    
+    train_loader, val_loader = create_dataloaders(X_train, y_train, X_val, y_val, batch_size)
+    
+    # 4. Training loop with Optuna pruning
     best_val_acc = 0.0
-    patience_counter = 0
-    early_stop_patience = 5
     
     for epoch in range(n_epochs):
-        # Training
-        train_loss = 0.0
-        train_correct = 0
-        train_total = 0
-        
+        # Train
         model.train()
-        for batch_data, batch_labels in train_loader:
-            loss, acc = classifier.train_step(batch_data, batch_labels, optimizer)
-            train_loss += loss * batch_data.size(0)
-            train_correct += acc * batch_data.size(0)
-            train_total += batch_data.size(0)
+        for features, labels in train_loader:
+            features, labels = features.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = model(features)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
         
-        avg_train_loss = train_loss / train_total
-        avg_train_acc = train_correct / train_total
+        # Validate
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for features, labels in val_loader:
+                features, labels = features.to(device), labels.to(device)
+                outputs = model(features)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
         
-        # Validation
-        val_loss, val_acc = classifier.validate(val_loader)
+        val_acc = 100 * correct / total
         
-        # Update learning rate
-        scheduler.step(val_acc)
-        
-        # Track best validation accuracy
+        # Track best
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            patience_counter = 0
-        else:
-            patience_counter += 1
         
-        # Report intermediate value to Optuna
+        # Report to Optuna for pruning
         trial.report(val_acc, epoch)
         
-        # Early stopping (for Optuna pruning)
+        # Check if trial should be pruned
         if trial.should_prune():
             raise optuna.TrialPruned()
-        
-        # Early stopping (for this trial)
-        if patience_counter >= early_stop_patience:
-            print(f"Early stopping at epoch {epoch+1}")
-            break
     
     return best_val_acc
 
 
 def run_optuna_study(X_train, y_train, X_val, y_val, num_classes,
-                     n_trials=50, n_epochs=20, study_name='gait_cnn_optimization'):
+                     n_trials=50, n_epochs=20, study_name='gait_cnn_optimization',
+                     use_pruning=True):
     """
     Run Optuna hyperparameter optimization study
     
@@ -198,30 +252,48 @@ def run_optuna_study(X_train, y_train, X_val, y_val, num_classes,
         n_trials: Number of Optuna trials to run
         n_epochs: Number of epochs per trial
         study_name: Name for the study
+        use_pruning: If True, use objective with pruning (faster)
     
     Returns:
         study: Optuna study object with results
     """
     
     # Create Optuna study
-    study = optuna.create_study(
-        study_name=study_name,
-        direction='maximize',  # Maximize validation accuracy
-        pruner=optuna.pruners.MedianPruner(  # Prune unpromising trials
+    if use_pruning:
+        pruner = optuna.pruners.MedianPruner(
             n_startup_trials=5,
             n_warmup_steps=5,
             interval_steps=1
         )
+    else:
+        pruner = optuna.pruners.NopPruner()
+    
+    study = optuna.create_study(
+        study_name=study_name,
+        direction='maximize',  # Maximize validation accuracy
+        pruner=pruner
     )
+    
+    # Choose objective function
+    if use_pruning:
+        obj_func = lambda trial: objective_with_pruning(
+            trial, X_train, y_train, X_val, y_val, 
+            num_classes, n_epochs=n_epochs
+        )
+        print(f"Using objective WITH pruning (faster, stops bad trials early)")
+    else:
+        obj_func = lambda trial: objective(
+            trial, X_train, y_train, X_val, y_val, 
+            num_classes, n_epochs=n_epochs
+        )
+        print(f"Using objective WITHOUT pruning (uses your GaitClassifier.train())")
     
     # Run optimization
     study.optimize(
-        lambda trial: objective(
-            trial, X_train, y_train, X_val, y_val, 
-            num_classes, n_epochs=n_epochs
-        ),
+        obj_func,
         n_trials=n_trials,
-        show_progress_bar=True
+        show_progress_bar=True,
+        n_jobs=1  # Use 1 for debugging, increase for parallel trials
     )
     
     return study
@@ -242,7 +314,7 @@ def print_study_results(study):
     print("-"*60)
     trial = study.best_trial
     
-    print(f"  Value (Validation Accuracy): {trial.value:.4f}")
+    print(f"  Value (Validation Accuracy): {trial.value:.2f}%")
     print(f"\n  Best Hyperparameters:")
     for key, value in trial.params.items():
         print(f"    {key}: {value}")

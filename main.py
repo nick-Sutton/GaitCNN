@@ -2,11 +2,13 @@ from datetime import datetime
 import json
 import numpy as np
 from pathlib import Path
+
+import torch
 from dataset.gait_preprocessor import prepare_dataloaders
 from metrics.model_analyzer import ModelAnalyzer
 from model.gait_classifier import GaitClassifier
 from model.gait_cnn import GaitCNN
-from optimizer.hyper_param_optimizer import run_optuna_study
+from optimizer.hyper_param_optimizer import create_best_model, print_study_results, run_optuna_study
 
 def run_training_pipeline():
     # Create timestamped log directory
@@ -168,9 +170,10 @@ def hyperparam_optim():
         X_train, y_train, 
         X_val, y_val,
         num_classes=num_classes,
-        n_trials=20,      # Start with 20 trials (increase for better results)
-        n_epochs=15,      # 15 epochs per trial
-        study_name='gait_cnn_tuning'
+        n_trials=20,          # Start with 20 trials
+        n_epochs=15,          # 15 epochs per trial
+        study_name='gait_cnn_tuning',
+        use_pruning=True      # Use pruning for faster optimization
     )
     
     # ==========================================
@@ -178,71 +181,6 @@ def hyperparam_optim():
     # ==========================================
     
     best_params = print_study_results(study)
-    
-    # ==========================================
-    # 4. CREATE AND SAVE BEST MODEL
-    # ==========================================
-    
-    print("\n" + "="*60)
-    print("CREATING BEST MODEL")
-    print("="*60)
-    
-    best_model = create_best_model(
-        best_params, 
-        num_classes=num_classes,
-        input_length=time_steps,
-        input_channels=n_channels
-    )
-    
-    print(f"✓ Best model created")
-    print(f"✓ Total parameters: {sum(p.numel() for p in best_model.parameters()):,}")
-    
-    # Save best model
-    torch.save({
-        'model_state_dict': best_model.state_dict(),
-        'hyperparameters': best_params,
-        'num_classes': num_classes
-    }, 'best_gait_cnn_model.pth')
-    
-    print(f"✓ Model saved to 'best_gait_cnn_model.pth'")
-    
-    # ==========================================
-    # 5. VISUALIZE OPTIMIZATION (Optional)
-    # ==========================================
-    
-    print("\n" + "="*60)
-    print("VISUALIZATION (if you have plotly installed)")
-    print("="*60)
-    
-    try:
-        import optuna.visualization as vis
-        
-        # Optimization history
-        fig = vis.plot_optimization_history(study)
-        fig.write_html('optimization_history.html')
-        print("✓ Saved optimization_history.html")
-        
-        # Parameter importances
-        fig = vis.plot_param_importances(study)
-        fig.write_html('param_importances.html')
-        print("✓ Saved param_importances.html")
-        
-        # Parallel coordinate plot
-        fig = vis.plot_parallel_coordinate(study)
-        fig.write_html('parallel_coordinate.html')
-        print("✓ Saved parallel_coordinate.html")
-        
-    except ImportError:
-        print("⚠ Install plotly to visualize results: pip install plotly")
-    
-    print("\n" + "="*60)
-    print("OPTIMIZATION COMPLETE!")
-    print("="*60)
-    print("\nNext steps:")
-    print("  1. Review the best hyperparameters above")
-    print("  2. Train final model with best_params on full dataset")
-    print("  3. Check visualization HTML files for insights")
-    print("  4. Consider running more trials for better results")
 
 if __name__ == "__main__":
     #run_training_pipeline()
