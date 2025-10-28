@@ -14,13 +14,13 @@ class GaitCNN(nn.Module):
                  input_channels=24,
                  num_classes=3,
                  # Conv1 params
-                 f11=14, f12=7, w1=20,
+                 f11=13, f12=7, w1=20,
                  # Pool1 params
-                 p11=6, p12=3,
+                 p11=3, p12=3,
                  # Conv2 params
-                 f21=12, f22=12, w2=15,
+                 f21=11, f22=11, w2=15,
                  # Pool2 params
-                 p21=5, p22=3,
+                 p21=3, p22=3,
                  # Fully connected params
                  fc_neurons=4576,
                  dropout_rate=0.5):
@@ -30,6 +30,7 @@ class GaitCNN(nn.Module):
         # Convolutional Layer 1
         # Each kernel/filter learns to detect different features
         # w1=20 means we learn 20 different feature detectors
+        
         self.conv1 = nn.Conv2d(
             in_channels=1,           # Input: 1 channel
             out_channels=w1,         # Output: w1 feature maps
@@ -59,6 +60,11 @@ class GaitCNN(nn.Module):
             kernel_size=(p21, p22),
             stride=2
         )
+
+        # TODO: Condiser removing adaptive pooling
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((4, 4))
+
+        self.flatten_size = w2 * 4 * 4
         
         # Calculate the flattened size after convolutions and pooling
         self._calculate_flatten_size(input_length, input_channels, 
@@ -77,18 +83,6 @@ class GaitCNN(nn.Module):
         self.input_length = input_length
         self.input_channels = input_channels
         self.num_classes = num_classes
-        
-    def _calculate_flatten_size(self, lI, hI, p11, p12, p21, p22, w2):
-        """Calculate size after pooling layers"""
-        # After pool1
-        lL1 = (lI + 2*0 - p11) // 2 + 1
-        hL1 = (hI + 2*0 - p12) // 2 + 1
-        
-        # After pool2
-        lL2 = (lL1 + 2*0 - p21) // 2 + 1
-        hL2 = (hL1 + 2*0 - p22) // 2 + 1
-        
-        self.flatten_size = lL2 * hL2 * w2
         
     def forward(self, x):
         """

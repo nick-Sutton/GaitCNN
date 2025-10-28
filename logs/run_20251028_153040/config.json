@@ -1,0 +1,17 @@
+{
+    "data_files": "data/TrainingDataV2/*.csv",
+    "window_length": 100,
+    "stride": 50,
+    "batch_size": 32,
+    "label_column": "gait_type",
+    "test_size": 0.2,
+    "random_state": 42,
+    "epochs": 50,
+    "learning_rate": 0.001,
+    "early_stopping_patience": 10,
+    "class_names": [
+        "Stand",
+        "Walk",
+        "Jog"
+    ]
+}
