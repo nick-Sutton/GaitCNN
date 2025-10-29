@@ -106,6 +106,8 @@ class GaitCNN(nn.Module):
         
         # Pool2
         x = self.pool2(x)
+
+        x = self.adaptive_pool(x) 
         
         # Flatten
         x = x.view(x.size(0), -1)
