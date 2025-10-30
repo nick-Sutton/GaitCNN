@@ -12,20 +12,16 @@ def remove_features(input_file_dir: str, output_file_dir: str):
         if os.path.isfile(raw_full_path):
             df_raw = pd.read_csv(raw_full_path)
 
-            # Specify the reference column
-            reference_column = 'right_pos_rel_z'
-
-            # Find the index of the reference column
-            ref_col_index = df_raw.columns.get_loc(reference_column)
-
-            # Get the names of columns to drop (all columns after the reference column)
-            columns_to_drop = df_raw.columns[ref_col_index + 1:].tolist()
+            # Cols to drop
+            pos_cols = ['root_position_x','root_position_y','root_position_z',
+                        'root_orientation_x','root_orientation_y','root_orientation_z']
 
             # Drop the columns
-            df_dropped = df_raw.drop(columns=columns_to_drop)
+            df_dropped = df_raw.drop(columns=pos_cols)
 
+            # remove any spaces in gait_type
             df_dropped['gait_type'] = df_dropped['gait_type'].str.strip()
 
             df_dropped.to_csv(processed_full_path, index=False)
 
-remove_features('./data/TrainingData', './data/TrainingDataV2')
+remove_features('./data/TrainingData', './data/TrainingDataV3')

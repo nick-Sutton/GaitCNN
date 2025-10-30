@@ -141,6 +141,155 @@ def run_training_pipeline():
     
     return classifier, analyzer, log_dir
 
+def run_tcn_training_pipeline():
+    """
+    Complete training pipeline for TCN gait classification model.
+    """
+    
+    # Create timestamped log directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = Path(f"logs/tcn_run_{timestamp}")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{'='*60}")
+    print(f"TCN Training Pipeline")
+    print(f"Log directory: {log_dir}")
+    print(f"{'='*60}\n")
+    
+    # Configuration
+    config = {
+        # Data parameters
+        'data_files': 'data/TrainingDataV2/*.csv',
+        'window_length': 100,
+        'stride': 50,
+        'batch_size': 32,
+        'label_column': 'gait_type',
+        'test_size': 0.2,
+        'random_state': 42,
+        
+        # Model parameters
+        'num_channels': [64, 128, 256],
+        'kernel_size': 7,
+        'dropout_rate': 0.3,
+        
+        # Training parameters
+        'epochs': 50,
+        'learning_rate': 0.001,
+        'early_stopping_patience': 10,
+        
+        # Class information
+        'class_names': ['Stand', 'Walk', 'Jog']
+    }
+    
+    # Save config
+    with open(log_dir / 'config.json', 'w') as f:
+        json.dump(config, f, indent=4)
+    
+    # Load and prep data
+    print("========Loading and preparing data========")
+    train_loader, test_loader, preprocessor = prepare_dataloaders(
+        data_files=config['data_files'],
+        window_length=config['window_length'],
+        stride=config['stride'],
+        batch_size=config['batch_size'],
+        label_column=config['label_column'],
+        test_size=config['test_size'],
+        random_state=config['random_state']
+    )
+    
+    # Create Model
+    print("\n========Creating TCN model========")
+    sample_features, _ = next(iter(train_loader))
+    num_channels = sample_features.shape[2]
+    
+    model = GaitTCN(
+        input_length=config['window_length'],
+        input_channels=num_channels,
+        num_classes=len(config['class_names']),
+        num_channels=config['num_channels'],
+        kernel_size=config['kernel_size'],
+        dropout_rate=config['dropout_rate']
+    )
+    
+    print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
+
+    # Create Classifier
+    print("\n========Creating classifier========")
+    classifier = GaitClassifier(
+        model=model,
+        class_names=config['class_names']
+    )
+    
+    # Train TCN
+    print("\n========Training model========")
+    history = classifier.train(
+        train_loader=train_loader,
+        val_loader=test_loader,
+        epochs=config['epochs'],
+        learning_rate=config['learning_rate'],
+        early_stopping_patience=config['early_stopping_patience'],
+        save_best_model=True,
+        model_save_path=str(log_dir / 'best_model.pth')
+    )
+    
+    # Evaluate Model Performance
+    print("\n========Final evaluation========")
+    test_results = classifier.evaluate(test_loader, return_predictions=True)
+    
+    # Save test results
+    with open(log_dir / 'test_results.json', 'w') as f:
+        results_to_save = {
+            'loss': float(test_results['loss']),
+            'accuracy': float(test_results['accuracy']),
+            'class_accuracies': {k: float(v) for k, v in test_results['class_accuracies'].items()}
+        }
+        json.dump(results_to_save, f, indent=4)
+    
+    # Sample predictions
+    print("\n========Example predictions========")
+    sample_batch, sample_labels = next(iter(test_loader))
+    predictions = classifier.predict_with_names(sample_batch[:5])
+    
+    print("\nSample Predictions:")
+    for i, (class_name, confidence) in enumerate(predictions):
+        true_label = config['class_names'][sample_labels[i].item()]
+        correct = "✓" if class_name == true_label else "✗"
+        print(f"  {correct} Sample {i+1}: {class_name} ({confidence:.1f}% confidence) | True: {true_label}")
+    
+    # Analysis
+    print("\n========Generating comprehensive analysis========")
+    analyzer = ModelAnalyzer(
+        classifier=classifier,
+        class_names=config['class_names'],
+        device=classifier.device
+    )
+    analyzer.generate_report(test_loader, log_dir)
+    
+    # Save Model
+    print("\n========Saving final model========")
+    classifier.save_model(str(log_dir / 'final_model.pth'))
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("✓ TCN Training pipeline complete!")
+    print("="*60)
+    print(f"\n📁 Results saved to: {log_dir}/")
+    print("\n📊 Generated files:")
+    print("  - config.json")
+    print("  - best_model.pth")
+    print("  - final_model.pth")
+    print("  - test_results.json")
+    print("  - training_curves.png")
+    print("  - confusion_matrix.png")
+    print("  - roc_curves.png")
+    print("  - confidence_distribution.png")
+    print("  - misclassifications.csv")
+    print("  - training_history.csv")
+    print("  - classification_report.txt")
+    print(f"\n{'='*60}\n")
+    
+    return classifier, analyzer, log_dir
+
 def hyperparam_optim_tcn():
     print("="*60)
     print("GAIT TCN HYPERPARAMETER OPTIMIZATION")
