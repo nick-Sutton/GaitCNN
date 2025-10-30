@@ -183,5 +183,5 @@ def hyperparam_optim():
     best_params = print_study_results(study)
 
 if __name__ == "__main__":
-    #run_training_pipeline()
-    hyperparam_optim()
+    run_training_pipeline()
+    #hyperparam_optim()
