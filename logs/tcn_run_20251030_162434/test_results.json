@@ -1,0 +1,9 @@
+{
+    "loss": NaN,
+    "accuracy": 20.920502092050206,
+    "class_accuracies": {
+        "Stand": 100.0,
+        "Walk": 0.0,
+        "Jog": 0.0
+    }
+}

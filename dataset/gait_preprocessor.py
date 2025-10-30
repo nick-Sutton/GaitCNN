@@ -27,6 +27,7 @@ class GaitPreprocessor:
         self.normalize = normalize
         self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.label_encoder = LabelEncoder()
+        self.support_type_encoder = LabelEncoder()
         self.is_fitted = False
         self.labels_fitted = False
         
@@ -83,7 +84,25 @@ class GaitPreprocessor:
             labels = self.label_encoder.transform(labels)
         
         print(f"Unique classes: {np.unique(labels)} -> {self.label_encoder.classes_}")
+
+        # Encode support type BEFORE dropping columns
+        support_type_values = None
+        if 'support_type' in df.columns:
+            if not hasattr(self, 'support_type_fitted'):
+                support_type_values = self.support_type_encoder.fit_transform(df['support_type'])
+                self.support_type_fitted = True
+                print(f"Fitted support_type encoder on classes: {self.support_type_encoder.classes_}")
+            else:
+                support_type_values = self.support_type_encoder.transform(df['support_type'])
+            
+            print(f"Support Types: {np.unique(support_type_values)} -> {self.support_type_encoder.classes_}")
+            
+            # Remove support_type temporarily for normalization
+            df = df.drop(columns=['support_type'])
         
+        # Extract features (without support_type and label)
+        features = df.drop(columns=[label_column]).values
+
         # Normalize features to [0, 1]
         if self.normalize:
             if not self.is_fitted:
@@ -95,6 +114,14 @@ class GaitPreprocessor:
                 print("Applied existing scaler")
             
             print(f"Normalized - Min: {features.min():.4f}, Max: {features.max():.4f}")
+
+        # Add support_type back as a separate column (not normalized)
+        if support_type_values is not None:
+            features = np.column_stack([features, support_type_values])
+            print(f"Added support_type column (not normalized)")
+        
+        print(f"Final features shape: {features.shape}")
+        print(f"Number of channels (sensors): {features.shape[1]}")
         
         return features, labels
     

@@ -1,0 +1,24 @@
+{
+    "data_files": "data/TrainingDataV4/*.csv",
+    "window_length": 100,
+    "stride": 50,
+    "batch_size": 32,
+    "label_column": "gait_type",
+    "test_size": 0.2,
+    "random_state": 42,
+    "num_channels": [
+        64,
+        128,
+        256
+    ],
+    "kernel_size": 7,
+    "dropout_rate": 0.3,
+    "epochs": 50,
+    "learning_rate": 0.001,
+    "early_stopping_patience": 10,
+    "class_names": [
+        "Stand",
+        "Walk",
+        "Jog"
+    ]
+}

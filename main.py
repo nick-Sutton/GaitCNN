@@ -68,7 +68,7 @@ def run_training_pipeline():
         num_classes=len(config['class_names']),
         num_channels=[32, 64, 128],
         kernel_size=3,
-        dropout_rate=0.5+
+        dropout_rate=0.5
     )
     
     print("\n========Creating classifier========")
@@ -159,7 +159,7 @@ def run_tcn_training_pipeline():
     # Configuration
     config = {
         # Data parameters
-        'data_files': 'data/TrainingDataV2/*.csv',
+        'data_files': 'data/TrainingDataV4/*.csv',
         'window_length': 100,
         'stride': 50,
         'batch_size': 32,
@@ -355,6 +355,7 @@ def hyperparam_optim_tcn():
     best_params = print_study_results_tcn(study)
 
 if __name__ == "__main__":
-    run_training_pipeline()
+    #run_training_pipeline()
     #hyperparam_optim()
     #hyperparam_optim_tcn()
+    run_tcn_training_pipeline()
