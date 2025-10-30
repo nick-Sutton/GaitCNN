@@ -8,7 +8,9 @@ from dataset.gait_preprocessor import prepare_dataloaders
 from metrics.model_analyzer import ModelAnalyzer
 from model.gait_classifier import GaitClassifier
 from model.gait_cnn import GaitCNN
+from model.gait_tcn import GaitTCN
 from optimizer.hyper_param_optimizer import create_best_model, print_study_results, run_optuna_study
+from optimizer.tcn import run_optuna_study_tcn, print_study_results_tcn
 
 def run_training_pipeline():
     # Create timestamped log directory
@@ -54,10 +56,19 @@ def run_training_pipeline():
     sample_features, _ = next(iter(train_loader))
     num_channels = sample_features.shape[2]
     
-    model = GaitCNN(
+    # model = GaitCNN(
+    #    input_length=config['window_length'],
+    #    input_channels=num_channels,
+    #    num_classes=len(config['class_names'])
+    #)
+
+    model = GaitTCN(
         input_length=config['window_length'],
         input_channels=num_channels,
-        num_classes=len(config['class_names'])
+        num_classes=len(config['class_names']),
+        num_channels=[64, 64, 128, 128],
+        kernel_size=3,
+        dropout_rate=0.5
     )
     
     print("\n========Creating classifier========")
@@ -130,58 +141,71 @@ def run_training_pipeline():
     
     return classifier, analyzer, log_dir
 
-def hyperparam_optim():
+def hyperparam_optim_tcn():
     print("="*60)
-    print("GAIT CNN HYPERPARAMETER OPTIMIZATION WITH OPTUNA")
+    print("GAIT TCN HYPERPARAMETER OPTIMIZATION")
     print("="*60)
     
-    # ==========================================
-    # 1. PREPARE YOUR DATA
-    # ==========================================
+    # Configuration
+    config = {
+        'data_files': 'data/TrainingDataV2/*.csv',
+        'window_length': 100,
+        'stride': 50,
+        'batch_size': 32,
+        'label_column': 'gait_type',
+        'test_size': 0.2,
+        'random_state': 42,
+    }
     
     print("\n1. Preparing data...")
+    train_loader, val_loader, preprocessor = prepare_dataloaders(
+        data_files=config['data_files'],
+        window_length=config['window_length'],
+        stride=config['stride'],
+        batch_size=config['batch_size'],
+        label_column=config['label_column'],
+        test_size=config['test_size'],
+        random_state=config['random_state']
+    )
     
-    # Example: Create dummy data (replace with your actual data)
-    n_samples_train = 1000
-    n_samples_val = 200
-    time_steps = 100
-    n_channels = 24
-    num_classes = 3
+    # Convert DataLoaders to numpy arrays for Optuna
+    X_train, y_train = [], []
+    for features, labels in train_loader:
+        X_train.append(features.numpy())
+        y_train.append(labels.numpy())
+    X_train = np.vstack(X_train)
+    y_train = np.concatenate(y_train)
     
-    # Simulate data (replace with your actual normalized data)
-    X_train = np.random.rand(n_samples_train, time_steps, n_channels).astype(np.float32)
-    y_train = np.random.randint(0, num_classes, n_samples_train)
+    X_val, y_val = [], []
+    for features, labels in val_loader:
+        X_val.append(features.numpy())
+        y_val.append(labels.numpy())
+    X_val = np.vstack(X_val)
+    y_val = np.concatenate(y_val)
     
-    X_val = np.random.rand(n_samples_val, time_steps, n_channels).astype(np.float32)
-    y_val = np.random.randint(0, num_classes, n_samples_val)
+    num_classes = len(np.unique(y_train))
     
     print(f"✓ Training data: {X_train.shape}")
     print(f"✓ Validation data: {X_val.shape}")
     print(f"✓ Number of classes: {num_classes}")
     
-    # ==========================================
-    # 2. RUN OPTUNA OPTIMIZATION
-    # ==========================================
+    # Run Optuna optimization for TCN
+    # Now automatically detects input_channels from X_train.shape[2]
+    print("\n2. Running Optuna optimization for TCN...")
     
-    print("\n2. Running Optuna optimization...")
-    print("   This may take a while depending on n_trials and n_epochs...")
-    
-    study = run_optuna_study(
+    study = run_optuna_study_tcn(
         X_train, y_train, 
         X_val, y_val,
         num_classes=num_classes,
-        n_trials=20,          # Start with 20 trials
-        n_epochs=15,          # 15 epochs per trial
-        study_name='gait_cnn_tuning',
-        use_pruning=True      # Use pruning for faster optimization
+        n_trials=30,
+        n_epochs=15,
+        study_name='gait_tcn_tuning',
+        use_pruning=True
     )
     
-    # ==========================================
-    # 3. PRINT RESULTS
-    # ==========================================
-    
-    best_params = print_study_results(study)
+    best_params = print_study_results_tcn(study)
 
 if __name__ == "__main__":
-    run_training_pipeline()
+    #run_training_pipeline()
     #hyperparam_optim()
+    hyperparam_optim_tcn()

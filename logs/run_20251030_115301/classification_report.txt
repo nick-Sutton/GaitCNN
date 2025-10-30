@@ -1,0 +1,9 @@
+              precision    recall  f1-score   support
+
+       Stand      0.923     0.837     0.878        43
+        Walk      0.847     0.877     0.862        57
+         Jog      0.924     0.937     0.931       143
+
+    accuracy                          0.905       243
+   macro avg      0.898     0.884     0.890       243
+weighted avg      0.906     0.905     0.905       243
