@@ -24,7 +24,7 @@ def run_training_pipeline():
     
     # Configuration
     config = {
-        'data_files': 'data/TrainingDataV2/*.csv',
+        'data_files': 'data/Train_Combined/*.csv',
         'window_length': 100,
         'stride': 50,
         'batch_size': 32,
@@ -34,7 +34,7 @@ def run_training_pipeline():
         'epochs': 50,
         'learning_rate': 0.001,
         'early_stopping_patience': 10,
-        'class_names': ['Stand', 'Walk', 'Jog']
+        'class_names': ['Stand', 'Walk', 'Jog', 'Quasi', 'Step_acsent', 'Step_decsent', 'Stair_acsent', 'Step_decsent']
     }
     
     # Save config
@@ -159,7 +159,7 @@ def run_tcn_training_pipeline():
     # Configuration
     config = {
         # Data parameters
-        'data_files': 'data/TrainingDataV4/*.csv',
+        'data_files': 'data/Train_Combined/*.csv',
         'window_length': 100,
         'stride': 50,
         'batch_size': 32,

@@ -85,7 +85,7 @@ class GaitPreprocessor:
         
         print(f"Unique classes: {np.unique(labels)} -> {self.label_encoder.classes_}")
 
-        # Encode support type BEFORE dropping columns
+        # Encode support type
         support_type_values = None
         if 'support_type' in df.columns:
             if not hasattr(self, 'support_type_fitted'):
