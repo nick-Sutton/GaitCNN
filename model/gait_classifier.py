@@ -153,8 +153,9 @@ class GaitClassifier:
             outputs = self.model(features)
             loss = criterion(outputs, labels)
             
-            # Backward pass
+            # Backward pass with gradient clipping
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # ADD THIS LINE
             optimizer.step()
             
             # Statistics

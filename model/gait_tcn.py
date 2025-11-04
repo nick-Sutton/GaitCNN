@@ -95,6 +95,21 @@ class GaitTCN(nn.Module):
         return x
 
 
+class Chomp1d(nn.Module):
+    """
+    Removes padding from the end of the sequence to maintain causality.
+    This ensures the convolution only looks at past timesteps, not future ones.
+    """
+    def __init__(self, chomp_size):
+        super(Chomp1d, self).__init__()
+        self.chomp_size = chomp_size
+    
+    def forward(self, x):
+        if self.chomp_size > 0:
+            return x[:, :, :-self.chomp_size].contiguous()
+        return x
+
+
 class TemporalBlock(nn.Module):
     """
     Single TCN block with dilated causal convolutions and residual connection.
@@ -103,43 +118,59 @@ class TemporalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, dilation, dropout):
         super(TemporalBlock, self).__init__()
         
-        # Calculate padding for causal convolution
         padding = (kernel_size - 1) * dilation
         
-        # First convolutional layer
-        self.conv1 = nn.utils.weight_norm(
-            nn.Conv1d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                padding=padding,
-                dilation=dilation
-            )
+        # REMOVE weight_norm wrapper
+        self.conv1 = nn.Conv1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            dilation=dilation
+        )
+        self.bn1 = nn.BatchNorm1d(out_channels)  # ADD THIS
+        self.chomp1 = Chomp1d(padding)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(dropout)
+        
+        self.conv2 = nn.Conv1d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            dilation=dilation
+        )
+        self.bn2 = nn.BatchNorm1d(out_channels)  # ADD THIS
+        self.chomp2 = Chomp1d(padding)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(dropout)
+        
+        # Order matters: Conv → Chomp → BatchNorm → ReLU → Dropout
+        self.net = nn.Sequential(
+            self.conv1, self.chomp1, self.bn1, self.relu1, self.dropout1,
+            self.conv2, self.chomp2, self.bn2, self.relu2, self.dropout2
         )
         
-        # Second convolutional layer
-        self.conv2 = nn.utils.weight_norm(
-            nn.Conv1d(
-                in_channels=out_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                padding=padding,
-                dilation=dilation
-            )
-        )
-        
-        self.dropout = nn.Dropout(dropout)
-        
-        # 1x1 conv for residual connection if dimensions don't match
         self.downsample = None
         if in_channels != out_channels:
-            self.downsample = nn.utils.weight_norm(
-                nn.Conv1d(in_channels, out_channels, kernel_size=1)
+            self.downsample = nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, 1),
+                nn.BatchNorm1d(out_channels)  # ADD THIS
             )
+    
+    def init_weights(self):
+        """
+        Initialize weights with small values to prevent exploding gradients.
+        Usi                nng normal distribution with std=0.01 for stable initialization.
+        """
+        self.conv1.weight.data.normal_(0, 0.01)
+        self.conv2.weight.data.normal_(0, 0.01)
+        if self.downsample is not None:
+            self.downsample.weight.data.normal_(0, 0.01)
     
     def forward(self, x):
         """
-        Forward pass with residual connection
+        Forward pass with residual connection.
         
         Args:
             x: Input tensor (batch, channels, time)
@@ -147,28 +178,10 @@ class TemporalBlock(nn.Module):
         Returns:
             Output tensor (batch, channels, time)
         """
-        # Store residual
-        residual = x
+        # Main path through convolutions
+        out = self.net(x)
         
-        # First conv block
-        out = self.conv1(x)
-        out = F.relu(out)
-        out = self.dropout(out)
+        # Residual path
+        res = x if self.downsample is None else self.downsample(x)
         
-        # Second conv block
-        out = self.conv2(out)
-        out = F.relu(out)
-        out = self.dropout(out)
-        
-        # Truncate to match input length (causal)
-        out = out[:, :, :x.size(2)]
-        
-        # Apply residual connection
-        if self.downsample is not None:
-            residual = self.downsample(residual)
-            residual = residual[:, :, :x.size(2)]
-        
-        out = out + residual
-        out = F.relu(out)
-        
-        return out
+        return out + res

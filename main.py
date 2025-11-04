@@ -174,7 +174,7 @@ def run_tcn_training_pipeline():
         
         # Training parameters
         'epochs': 50,
-        'learning_rate': 0.001,
+        'learning_rate': 0.0001,
         'early_stopping_patience': 10,
         
         # Class information
