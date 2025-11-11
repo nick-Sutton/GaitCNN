@@ -311,7 +311,7 @@ def hyperparam_optim_tcn():
     
     # Configuration
     config = {
-        'data_files': 'data/TrainingDataV2/*.csv',
+        'data_files': 'data/Train_Combined/*.csv',
         'window_length': 100,
         'stride': 50,
         'batch_size': 32,
