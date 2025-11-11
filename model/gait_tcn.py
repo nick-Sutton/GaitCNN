@@ -12,7 +12,7 @@ class GaitTCN(nn.Module):
     def __init__(self, 
                  input_length=100,
                  input_channels=24,
-                 num_classes=3,
+                 num_classes=8,
                  num_channels=[64, 128, 256],
                  kernel_size=7,
                  dropout_rate=0.3):

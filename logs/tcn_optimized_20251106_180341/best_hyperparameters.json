@@ -1,0 +1,10 @@
+{
+    "num_layers": 5,
+    "channel_strategy": "constant",
+    "base_channels": 96,
+    "kernel_size": 5,
+    "dropout_rate": 0.10148551096087713,
+    "learning_rate": 0.00010551214994272557,
+    "weight_decay": 1.508326212029359e-05,
+    "batch_size": 32
+}

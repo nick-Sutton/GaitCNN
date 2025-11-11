@@ -50,6 +50,7 @@ class GaitClassifier:
               learning_rate=0.001,
               weight_decay=1e-5,
               early_stopping_patience=10,
+              class_weights=None,
               save_best_model=True,
               model_save_path='best_model.pth'):
         """
@@ -68,8 +69,16 @@ class GaitClassifier:
         Returns:
             Dictionary with training history
         """
-        # Loss function and optimizer
-        criterion = nn.CrossEntropyLoss()
+
+        # Calculate Class weights
+        if class_weights is not None:
+            class_weights = torch.FloatTensor(class_weights).to(self.device)
+            criterion = nn.CrossEntropyLoss(weight=class_weights)
+            print(f"Using weighted loss with weights: {class_weights}")
+        else:
+            criterion = nn.CrossEntropyLoss()
+
+        # optimizer
         optimizer = optim.Adam(
             self.model.parameters(), 
             lr=learning_rate,

@@ -35,7 +35,7 @@ def create_dataloaders(X_train, y_train, X_val, y_val, batch_size):
 
 
 def objective_tcn(trial, X_train, y_train, X_val, y_val, num_classes, 
-                  input_length=100, input_channels=None, n_epochs=20):
+                  input_length=100, input_channels=None, n_epochs=20, class_weights=None):
     """
     Optuna objective function for TCN hyperparameter optimization
     
@@ -49,6 +49,7 @@ def objective_tcn(trial, X_train, y_train, X_val, y_val, num_classes,
         input_length: Time window length
         input_channels: Number of sensor channels (auto-detected if None)
         n_epochs: Number of training epochs per trial
+        class_weights: Class weights for imbalanced data (optional)
     
     Returns:
         Best validation accuracy achieved
@@ -57,23 +58,6 @@ def objective_tcn(trial, X_train, y_train, X_val, y_val, num_classes,
     # Auto-detect input channels if not provided
     if input_channels is None:
         input_channels = X_train.shape[2]
-    """
-    Optuna objective function for TCN hyperparameter optimization
-    
-    Args:
-        trial: Optuna trial object
-        X_train: Training data (n_samples, time_steps, channels)
-        y_train: Training labels (n_samples,)
-        X_val: Validation data
-        y_val: Validation labels
-        num_classes: Number of classes to predict
-        input_length: Time window length
-        input_channels: Number of sensor channels
-        n_epochs: Number of training epochs per trial
-    
-    Returns:
-        Best validation accuracy achieved
-    """
     
     # ==========================================
     # 1. SUGGEST TCN HYPERPARAMETERS
@@ -154,7 +138,8 @@ def objective_tcn(trial, X_train, y_train, X_val, y_val, num_classes,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
         early_stopping_patience=5,
-        save_best_model=False
+        save_best_model=False,
+        class_weights=class_weights  # Pass class weights
     )
     
     # Get best validation accuracy from history
@@ -164,11 +149,15 @@ def objective_tcn(trial, X_train, y_train, X_val, y_val, num_classes,
 
 
 def objective_tcn_with_pruning(trial, X_train, y_train, X_val, y_val, num_classes, 
-                                input_length=100, input_channels=26, n_epochs=20):
+                                input_length=100, input_channels=None, n_epochs=20, class_weights=None):
     """
     TCN objective with manual training loop for Optuna pruning.
     Allows stopping unpromising trials early.
     """
+    
+    # Auto-detect input channels if not provided
+    if input_channels is None:
+        input_channels = X_train.shape[2]
     
     # 1. Suggest hyperparameters
     num_layers = trial.suggest_int('num_layers', 3, 6)
@@ -208,8 +197,13 @@ def objective_tcn_with_pruning(trial, X_train, y_train, X_val, y_val, num_classe
         print(f"Error creating model: {e}")
         raise optuna.TrialPruned()
     
-    # 3. Setup training
-    criterion = nn.CrossEntropyLoss()
+    # 3. Setup training with class weights
+    if class_weights is not None:
+        weights = torch.FloatTensor(class_weights).to(device)
+        criterion = nn.CrossEntropyLoss(weight=weights)
+    else:
+        criterion = nn.CrossEntropyLoss()
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     train_loader, val_loader = create_dataloaders(X_train, y_train, X_val, y_val, batch_size)
@@ -226,6 +220,7 @@ def objective_tcn_with_pruning(trial, X_train, y_train, X_val, y_val, num_classe
             outputs = model(features)
             loss = criterion(outputs, labels)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
         
         # Validate
@@ -257,6 +252,7 @@ def objective_tcn_with_pruning(trial, X_train, y_train, X_val, y_val, num_classe
 
 
 def run_optuna_study_tcn(X_train, y_train, X_val, y_val, num_classes,
+                         class_weights=None,
                          n_trials=50, n_epochs=20, study_name='gait_tcn_optimization',
                          use_pruning=True):
     """
@@ -268,6 +264,7 @@ def run_optuna_study_tcn(X_train, y_train, X_val, y_val, num_classes,
         X_val: Validation data
         y_val: Validation labels
         num_classes: Number of classes
+        class_weights: Class weights for imbalanced data (optional)
         n_trials: Number of Optuna trials to run
         n_epochs: Number of epochs per trial
         study_name: Name for the study
@@ -293,17 +290,23 @@ def run_optuna_study_tcn(X_train, y_train, X_val, y_val, num_classes,
         pruner=pruner
     )
     
+    # Display class weights info
+    if class_weights is not None:
+        print(f"Using class weights: {class_weights.round(3)}")
+    else:
+        print("No class weights provided (assuming balanced data)")
+    
     # Choose objective function
     if use_pruning:
         obj_func = lambda trial: objective_tcn_with_pruning(
             trial, X_train, y_train, X_val, y_val, 
-            num_classes, n_epochs=n_epochs
+            num_classes, n_epochs=n_epochs, class_weights=class_weights
         )
         print(f"Using TCN objective WITH pruning (faster, stops bad trials early)")
     else:
         obj_func = lambda trial: objective_tcn(
             trial, X_train, y_train, X_val, y_val, 
-            num_classes, n_epochs=n_epochs
+            num_classes, n_epochs=n_epochs, class_weights=class_weights
         )
         print(f"Using TCN objective WITHOUT pruning (uses GaitClassifier.train())")
     
@@ -370,4 +373,3 @@ def print_study_results_tcn(study):
               'params_num_layers', 'params_base_channels', 'params_kernel_size']])
     
     return trial.params
-    
