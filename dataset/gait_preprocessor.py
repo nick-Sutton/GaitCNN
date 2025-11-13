@@ -66,6 +66,11 @@ class GaitPreprocessor:
         Returns:
             features (numpy array), labels (numpy array)
         """
+
+        # Drop id and timestamp columns
+        metadata_columns = ['frame_id', 'timestamp']
+        df = df.drop(columns=[col for col in metadata_columns if col in df.columns])
+
         # Separate features and labels
         if label_column in df.columns:
             labels = df[label_column].values
