@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle
 from torch.utils.data import DataLoader
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 import glob
@@ -238,4 +239,4 @@ def prepare_dataloaders(data_files,
     print(f"\nTraining batches: {len(train_loader)}")
     print(f"Test batches: {len(test_loader)}")
     
-    return train_loader, test_loader, preprocessor
+    return train_loader, test_loader, preprocessor, preprocessor.scaler, preprocessor.label_encoder, preprocessor.support_type_encoder
