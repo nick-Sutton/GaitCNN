@@ -1,0 +1,14 @@
+               precision    recall  f1-score   support
+
+          jog      0.965     0.624     0.758       133
+        quasi      0.975     0.747     0.846       158
+ stair_acsent      0.912     0.756     0.827        41
+stair_decsent      1.000     0.889     0.941        36
+        stand      0.719     0.974     0.827       347
+  step_acsent      1.000     0.312     0.476        32
+ step_decsent      0.875     0.656     0.750        32
+         walk      0.862     0.872     0.867       179
+
+     accuracy                          0.824       958
+    macro avg      0.914     0.729     0.786       958
+ weighted avg      0.856     0.824     0.818       958

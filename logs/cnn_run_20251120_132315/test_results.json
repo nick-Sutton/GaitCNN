@@ -1,0 +1,14 @@
+{
+    "loss": 2.053290792306264,
+    "accuracy": 33.889468196037534,
+    "class_accuracies": {
+        "jog": 0.0,
+        "quasi": 0.0,
+        "stair_acsent": 0.0,
+        "stair_decsent": 0.0,
+        "stand": 100.0,
+        "step_acsent": 0.0,
+        "step_decsent": 0.0,
+        "walk": 0.0
+    }
+}

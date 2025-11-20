@@ -1,0 +1,29 @@
+{
+    "data_files": "data/Train_Combined/*.csv",
+    "window_length": 50,
+    "stride": 50,
+    "batch_size": 128,
+    "label_column": "gait_type",
+    "test_size": 0.2,
+    "random_state": 42,
+    "num_channels": [
+        64,
+        128,
+        256
+    ],
+    "kernel_size": 7,
+    "dropout_rate": 0.3,
+    "epochs": 100,
+    "learning_rate": 0.0001,
+    "early_stopping_patience": 10,
+    "class_names": [
+        "jog",
+        "quasi",
+        "stair_acsent",
+        "stair_decsent",
+        "stand",
+        "step_acsent",
+        "step_decsent",
+        "walk"
+    ]
+}
