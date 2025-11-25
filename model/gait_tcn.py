@@ -11,6 +11,7 @@ class GaitTCN(nn.Module):
     2. Larger fully connected layer for more capacity
     3. Better initialization
     4. Optional squeeze-and-excitation blocks for channel attention
+    5. Configurable dilation base for receptive field control
     """
     
     def __init__(self, 
@@ -20,9 +21,10 @@ class GaitTCN(nn.Module):
                  num_channels=[64, 128, 256],
                  kernel_size=7,
                  dropout_rate=0.3,
-                 fc_neurons=2048,  # Added larger FC layer
-                 use_se_blocks=True,  # Channel attention
-                 causal=False):  # Make non-causal by default
+                 fc_neurons=2048,
+                 use_se_blocks=True,
+                 causal=False,
+                 dilation_base=2):
         """
         Args:
             input_length: Time-window length
@@ -34,6 +36,7 @@ class GaitTCN(nn.Module):
             fc_neurons: Number of neurons in fully connected layer
             use_se_blocks: Whether to use squeeze-and-excitation blocks
             causal: If True, use causal convolutions (only look backward)
+            dilation_base: Base for exponential dilation growth (default 2)
         """
         super().__init__()
         
@@ -51,7 +54,7 @@ class GaitTCN(nn.Module):
         self.tcn_blocks = nn.ModuleList()
         for i, out_channels in enumerate(num_channels):
             in_ch = num_channels[i-1] if i > 0 else num_channels[0]
-            dilation = 2 ** i
+            dilation = dilation_base ** i
             
             self.tcn_blocks.append(
                 TemporalBlock(
@@ -67,10 +70,10 @@ class GaitTCN(nn.Module):
         
         # Enhanced classification head
         self.adaptive_pool = nn.AdaptiveAvgPool1d(1)
-        self.adaptive_max_pool = nn.AdaptiveMaxPool1d(1)  # Add max pooling too
+        self.adaptive_max_pool = nn.AdaptiveMaxPool1d(1)
         
         # Larger fully connected layer for more capacity
-        self.fc1 = nn.Linear(num_channels[-1] * 2, fc_neurons)  # *2 for avg+max pooling
+        self.fc1 = nn.Linear(num_channels[-1] * 2, fc_neurons)
         self.bn_fc = nn.BatchNorm1d(fc_neurons)
         self.dropout1 = nn.Dropout(p=dropout_rate)
         
@@ -119,6 +122,14 @@ class GaitTCN(nn.Module):
         # Pass through TCN blocks
         for block in self.tcn_blocks:
             x = block(x)
+        
+        # Check if temporal dimension is valid before pooling
+        if x.size(2) == 0:
+            raise RuntimeError(
+                f"Temporal dimension reduced to 0. Input length ({self.input_length}) is too small for "
+                f"the network configuration. Try: (1) increasing window_length, (2) reducing kernel_size, "
+                f"(3) reducing dilation_base, or (4) using fewer layers."
+            )
         
         # Dual pooling (average + max) for richer features
         x_avg = self.adaptive_pool(x)
@@ -176,14 +187,16 @@ class TemporalBlock(nn.Module):
         # For causal: padding only on the left (past)
         if causal:
             padding = (kernel_size - 1) * dilation
+            conv_padding = padding  # Will be applied in conv layer
         else:
             padding = ((kernel_size - 1) * dilation) // 2
+            conv_padding = padding
         
         self.conv1 = nn.Conv1d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            padding=padding if not causal else 0,
+            padding=conv_padding,
             dilation=dilation
         )
         self.bn1 = nn.BatchNorm1d(out_channels)
@@ -197,7 +210,7 @@ class TemporalBlock(nn.Module):
             in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            padding=padding if not causal else 0,
+            padding=conv_padding,
             dilation=dilation
         )
         self.bn2 = nn.BatchNorm1d(out_channels)
@@ -228,28 +241,16 @@ class TemporalBlock(nn.Module):
         Returns:
             Output tensor (batch, channels, time)
         """
-        # Causal: need to pad manually before conv
-        if self.causal:
-            padding = (self.conv1.kernel_size[0] - 1) * self.conv1.dilation[0]
-            x_padded = F.pad(x, (padding, 0))
-            out = self.conv1(x_padded)
-        else:
-            out = self.conv1(x)
-        
+        # First convolution
+        out = self.conv1(x)
         out = self.bn1(out)
         if self.chomp1 is not None:
             out = self.chomp1(out)
         out = self.relu1(out)
         out = self.dropout1(out)
         
-        # Second conv
-        if self.causal:
-            padding = (self.conv2.kernel_size[0] - 1) * self.conv2.dilation[0]
-            out_padded = F.pad(out, (padding, 0))
-            out = self.conv2(out_padded)
-        else:
-            out = self.conv2(out)
-        
+        # Second convolution
+        out = self.conv2(out)
         out = self.bn2(out)
         if self.chomp2 is not None:
             out = self.chomp2(out)
@@ -262,6 +263,10 @@ class TemporalBlock(nn.Module):
         
         # Residual path
         res = x if self.downsample is None else self.downsample(x)
+        
+        # Match temporal dimensions if needed (for causal case)
+        if res.size(2) != out.size(2):
+            res = res[:, :, :out.size(2)]
         
         # Add residual and apply final activation
         return self.relu_out(out + res)

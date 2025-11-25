@@ -40,13 +40,13 @@ def run_tcn_training_pipeline():
         'random_state': 42,
         
         # Model parameters
-        'num_channels': [64, 128, 256],
-        'kernel_size': 5,
-        'dropout_rate': 0.2,
+        'num_channels': [128, 256, 512],
+        'kernel_size': 7,
+        'dropout_rate': 0.15,
         
         # Training parameters
         'epochs': 100,
-        'learning_rate': 0.0005,
+        'learning_rate': 0.0004,
         'early_stopping_patience': 10,
         
         # Class information
@@ -80,7 +80,8 @@ def run_tcn_training_pipeline():
         num_classes=len(config['class_names']),
         num_channels=config['num_channels'],
         kernel_size=config['kernel_size'],
-        dropout_rate=config['dropout_rate']
+        dropout_rate=config['dropout_rate'],
+        causal=True
     )
     
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
@@ -772,7 +773,7 @@ def hyperparam_optim_cnn():
     return study, best_params, classifier, log_dir
 
 if __name__ == "__main__":
-    run_cnn_training_pipeline()
+    #run_cnn_training_pipeline()
     #hyperparam_optim()
     #hyperparam_optim_tcn()
-    #run_tcn_training_pipeline()
+    run_tcn_training_pipeline()
